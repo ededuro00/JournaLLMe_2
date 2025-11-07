@@ -40,10 +40,6 @@ def migrate_database():
             print("Adding 'profile_completed' column...")
             cursor.execute("ALTER TABLE users ADD COLUMN profile_completed BOOLEAN DEFAULT 0 NOT NULL")
             print("✓ Added 'profile_completed' column")
-            
-            # Set profile_completed to False (0) for all existing users
-            cursor.execute("UPDATE users SET profile_completed = 0 WHERE profile_completed IS NULL")
-            print("✓ Set profile_completed = False for all existing users")
         else:
             print("'profile_completed' column already exists")
         

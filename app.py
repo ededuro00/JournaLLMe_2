@@ -22,6 +22,10 @@ db.init_app(app)
 # This is where our SQLite database file will be stored
 os.makedirs(os.path.join(app.root_path, 'instance'), exist_ok=True)
 
+# PROFILE SETUP CONSTANTS
+MIN_AGE = 1
+MAX_AGE = 120
+
 
 # QUESTIONNAIRE DATA
 # These dictionaries contain all the questions for each questionnaire
@@ -93,7 +97,13 @@ def login_required(f):
         
         # Check if user has completed profile setup
         user = User.query.get(session['user_id'])
-        if user and not user.profile_completed:
+        if not user:
+            # User was deleted from database
+            session.clear()
+            flash('Your account is no longer valid. Please contact support.', 'danger')
+            return redirect(url_for('login'))
+        
+        if not user.profile_completed:
             # Skip profile check for profile_setup route itself
             if f.__name__ != 'profile_setup':
                 flash('Please complete your profile first.', 'info')
@@ -192,6 +202,12 @@ def profile_setup():
     user_id = session['user_id']
     user = User.query.get(user_id)
     
+    # Safety check - should not happen due to login_required decorator
+    if not user:
+        session.clear()
+        flash('Your account is no longer valid. Please contact support.', 'danger')
+        return redirect(url_for('login'))
+    
     # If profile already completed, redirect to dashboard
     if user.profile_completed:
         return redirect(url_for('dashboard'))
@@ -207,8 +223,8 @@ def profile_setup():
         
         try:
             age = int(age)
-            if age < 1 or age > 120:
-                flash('Please enter a valid age between 1 and 120.', 'danger')
+            if age < MIN_AGE or age > MAX_AGE:
+                flash(f'Please enter a valid age between {MIN_AGE} and {MAX_AGE}.', 'danger')
                 return redirect(url_for('profile_setup'))
             
             # Update user profile
@@ -229,7 +245,7 @@ def profile_setup():
             return redirect(url_for('profile_setup'))
     
     # Show the profile setup form
-    return render_template('profile_setup.html')
+    return render_template('profile_setup.html', min_age=MIN_AGE, max_age=MAX_AGE)
 
 
 @app.route('/dashboard')
