@@ -82,6 +82,7 @@ def login_required(f):
     DECORATOR FUNCTION
     This is a wrapper that protects routes - users must be logged in to access them.
     If not logged in, they're redirected to the login page.
+    Also checks if profile setup is complete.
     """
     from functools import wraps
     @wraps(f)
@@ -89,6 +90,15 @@ def login_required(f):
         if 'user_id' not in session:
             flash('Please log in to access this page.', 'warning')
             return redirect(url_for('login'))
+        
+        # Check if user has completed profile setup
+        user = User.query.get(session['user_id'])
+        if user and not user.profile_completed:
+            # Skip profile check for profile_setup route itself
+            if f.__name__ != 'profile_setup':
+                flash('Please complete your profile first.', 'info')
+                return redirect(url_for('profile_setup'))
+        
         return f(*args, **kwargs)
     return decorated_function
 
@@ -145,6 +155,11 @@ def login():
             session['user_id'] = user.id
             session['username'] = user.username
             flash(f'Welcome, {user.username}!', 'success')
+            
+            # Check if profile is completed
+            if not user.profile_completed:
+                return redirect(url_for('profile_setup'))
+            
             return redirect(url_for('dashboard'))
         else:
             # Login failed
@@ -163,6 +178,58 @@ def logout():
     session.clear()
     flash('You have been logged out successfully.', 'info')
     return redirect(url_for('login'))
+
+
+@app.route('/profile_setup', methods=['GET', 'POST'])
+@login_required
+def profile_setup():
+    """
+    PROFILE SETUP PAGE
+    Collects age and gender on first login.
+    GET: Show the profile setup form
+    POST: Save profile information and mark profile as completed
+    """
+    user_id = session['user_id']
+    user = User.query.get(user_id)
+    
+    # If profile already completed, redirect to dashboard
+    if user.profile_completed:
+        return redirect(url_for('dashboard'))
+    
+    if request.method == 'POST':
+        age = request.form.get('age')
+        gender = request.form.get('gender')
+        
+        # Validate inputs
+        if not age or not gender:
+            flash('Please provide both age and gender.', 'danger')
+            return redirect(url_for('profile_setup'))
+        
+        try:
+            age = int(age)
+            if age < 1 or age > 120:
+                flash('Please enter a valid age between 1 and 120.', 'danger')
+                return redirect(url_for('profile_setup'))
+            
+            # Update user profile
+            user.age = age
+            user.gender = gender
+            user.profile_completed = True
+            db.session.commit()
+            
+            flash('Profile setup completed! You can now access the questionnaires.', 'success')
+            return redirect(url_for('dashboard'))
+            
+        except ValueError:
+            flash('Please enter a valid age.', 'danger')
+            return redirect(url_for('profile_setup'))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'An error occurred: {str(e)}', 'danger')
+            return redirect(url_for('profile_setup'))
+    
+    # Show the profile setup form
+    return render_template('profile_setup.html')
 
 
 @app.route('/dashboard')

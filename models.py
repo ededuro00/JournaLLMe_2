@@ -30,6 +30,11 @@ class User(db.Model):
     # Password - stored as a hash for security (not plain text!)
     password_hash = db.Column(db.String(255), nullable=False)
     
+    # User demographic information (collected on first login)
+    gender = db.Column(db.String(50), nullable=True)
+    age = db.Column(db.Integer, nullable=True)
+    profile_completed = db.Column(db.Boolean, default=False, nullable=False)
+    
     # Timestamp when user account was created
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
