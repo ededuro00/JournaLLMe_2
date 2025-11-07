@@ -22,10 +22,6 @@ db.init_app(app)
 # This is where our SQLite database file will be stored
 os.makedirs(os.path.join(app.root_path, 'instance'), exist_ok=True)
 
-# PROFILE SETUP CONSTANTS
-MIN_AGE = 1
-MAX_AGE = 120
-
 
 # QUESTIONNAIRE DATA
 # These dictionaries contain all the questions for each questionnaire
@@ -86,7 +82,6 @@ def login_required(f):
     DECORATOR FUNCTION
     This is a wrapper that protects routes - users must be logged in to access them.
     If not logged in, they're redirected to the login page.
-    Also checks if profile setup is complete.
     """
     from functools import wraps
     @wraps(f)
@@ -94,21 +89,6 @@ def login_required(f):
         if 'user_id' not in session:
             flash('Please log in to access this page.', 'warning')
             return redirect(url_for('login'))
-        
-        # Check if user has completed profile setup
-        user = User.query.get(session['user_id'])
-        if not user:
-            # User was deleted from database
-            session.clear()
-            flash('Your account is no longer valid. Please contact support.', 'danger')
-            return redirect(url_for('login'))
-        
-        if not user.profile_completed:
-            # Skip profile check for profile_setup route itself
-            if f.__name__ != 'profile_setup':
-                flash('Please complete your profile first.', 'info')
-                return redirect(url_for('profile_setup'))
-        
         return f(*args, **kwargs)
     return decorated_function
 
@@ -165,11 +145,6 @@ def login():
             session['user_id'] = user.id
             session['username'] = user.username
             flash(f'Welcome, {user.username}!', 'success')
-            
-            # Check if profile is completed
-            if not user.profile_completed:
-                return redirect(url_for('profile_setup'))
-            
             return redirect(url_for('dashboard'))
         else:
             # Login failed
@@ -188,64 +163,6 @@ def logout():
     session.clear()
     flash('You have been logged out successfully.', 'info')
     return redirect(url_for('login'))
-
-
-@app.route('/profile_setup', methods=['GET', 'POST'])
-@login_required
-def profile_setup():
-    """
-    PROFILE SETUP PAGE
-    Collects age and gender on first login.
-    GET: Show the profile setup form
-    POST: Save profile information and mark profile as completed
-    """
-    user_id = session['user_id']
-    user = User.query.get(user_id)
-    
-    # Safety check - should not happen due to login_required decorator
-    if not user:
-        session.clear()
-        flash('Your account is no longer valid. Please contact support.', 'danger')
-        return redirect(url_for('login'))
-    
-    # If profile already completed, redirect to dashboard
-    if user.profile_completed:
-        return redirect(url_for('dashboard'))
-    
-    if request.method == 'POST':
-        age = request.form.get('age')
-        gender = request.form.get('gender')
-        
-        # Validate inputs
-        if not age or not gender:
-            flash('Please provide both age and gender.', 'danger')
-            return redirect(url_for('profile_setup'))
-        
-        try:
-            age = int(age)
-            if age < MIN_AGE or age > MAX_AGE:
-                flash(f'Please enter a valid age between {MIN_AGE} and {MAX_AGE}.', 'danger')
-                return redirect(url_for('profile_setup'))
-            
-            # Update user profile
-            user.age = age
-            user.gender = gender
-            user.profile_completed = True
-            db.session.commit()
-            
-            flash('Profile setup completed! You can now access the questionnaires.', 'success')
-            return redirect(url_for('dashboard'))
-            
-        except ValueError:
-            flash('Please enter a valid age.', 'danger')
-            return redirect(url_for('profile_setup'))
-        except Exception as e:
-            db.session.rollback()
-            flash(f'An error occurred: {str(e)}', 'danger')
-            return redirect(url_for('profile_setup'))
-    
-    # Show the profile setup form
-    return render_template('profile_setup.html', min_age=MIN_AGE, max_age=MAX_AGE)
 
 
 @app.route('/dashboard')
